@@ -1,41 +1,16 @@
-import httpx
 import os
 from openai import OpenAI
-from dotenv import load_dotenv
-from chutes_e2ee import ChutesE2EETransport
 import json
 import re
 from predict import predict_age
+from config import load_config, Config
 
-load_dotenv()
-
-API_KEY = os.getenv("CHUTES_API_KEY")
-API_BASE = os.getenv("CHUTES_API_BASE")
-LLM = os.getenv("CHUTES_LLM")
-
-# (Unused)
-# MODEL_SLUG = "chutes-google-gemma-3-31b-turbo-tee"
-SYSTEM_PROMPT_PATH = "./prompts/system_prompt.txt"
-
-
-def check_file(file_path):
-    # Check if path exists
-    if not os.path.exists(file_path):
-        print(f"Path '{file_path}' does not exist")
-        return False
-
-    # Check if it's a file (not a directory)
-    if not os.path.isfile(file_path):
-        print(f"'{file_path}' is not a file")
-        return False
-
-    # Check if file is empty
-    if os.path.getsize(file_path) == 0:
-        print(f"File '{file_path}' is empty")
-        return False
-
-    print(f"File '{file_path}' exists and is not empty")
-    return True
+def check_file(path):
+    return (
+        os.path.exists(path)
+        and os.path.isfile(path)
+        and os.path.getsize(path) > 0
+    )
 
 
 def extract_json_data(mixed_string: str | None) -> dict:
@@ -45,69 +20,89 @@ def extract_json_data(mixed_string: str | None) -> dict:
     mixed_string = re.sub(r"^```json\s*", "", mixed_string.strip())
     mixed_string = re.sub(r"\s*```$", "", mixed_string)
 
-    return json.loads(mixed_string)
+    try:
+        return json.loads(mixed_string)
+    except json.JSONDecodeError:
+        return {}
+
+
+def create_client(conf: Config) -> OpenAI:
+    return OpenAI(
+        api_key=conf.api_key,
+        base_url=conf.api_base
+    )
 
 
 def main():
-    if not API_KEY:
-        raise ValueError("API error: API_KEY not set")
-    if not API_BASE:
-        raise ValueError("API error: API_BASE not set")
-
-    client = OpenAI(
-        api_key=API_KEY,
-        base_url=API_BASE
-    )
-
-    system_prompt = ""
-    messages = []
-
-    if check_file(SYSTEM_PROMPT_PATH):
-        print("Loading system prompt...")
-        with open(SYSTEM_PROMPT_PATH, "r", encoding="utf-8") as f:
-            system_prompt = f.read()
-
-    if system_prompt != "":
-        messages.append(
-            {"role": "system", "content": system_prompt}
-        )
 
     print("|----------------Message Input----------------|")
     user_input = input("> ")
-    print(">")
+    print("> ")
 
     if user_input != "":
         pred_results_dict = predict_age(user_input)
-        pred_results_str = json.dumps(pred_results_dict)
+        pred_results_str = json.dumps(
+            pred_results_dict,
+            ensure_ascii=False,
+            indent=2
+        )
 
         for k, v in pred_results_dict.items():
             if k != "text":
                 print(f"> {k}: {v}")
-
-        messages.append(
-            {"role": "user", "content": pred_results_str}
-        )
 
     else:
         print("Empty input. Cannot work without the user text")
         print("Terminating.....")
         return
 
+    conf = load_config()
 
-    try:
-        response = client.chat.completions.create(
-            model=LLM,
-            messages=messages,
-        )
-        llm_output_str = response.choices[0].message.content
-        llm_output_dict = extract_json_data(llm_output_str)
+    # If LLM is connected
+    if conf.llm_enabled():
+        client = create_client(conf)
 
-        print("|----------------Reasoning----------------|")
-        print(f"> {llm_output_dict['reasoning']}")
+        system_prompt = ""
+        messages = []
 
-    except Exception as e:
-        print(type(e))
-        print(e)
+        if check_file(conf.system_prompt_path):
+            print("Loading system prompt...")
+            with open(conf.system_prompt_path, "r", encoding="utf-8") as f:
+                system_prompt = f.read()
+
+        else:
+            print(f"Path '{conf.system_prompt_path}' does not exist or is empty")
+
+        if system_prompt != "":
+            messages.append(
+                {"role": "system", "content": system_prompt}
+            )
+
+        if pred_results_str != "":
+            messages.append(
+                {"role": "user", "content": pred_results_str}
+            )
+
+        try:
+            response = client.chat.completions.create(
+                model=conf.llm,
+                messages=messages,
+            )
+            llm_output_str = response.choices[0].message.content
+            llm_output_dict = extract_json_data(llm_output_str)
+
+            print("|----------------Reasoning----------------|")
+            print(f"> {llm_output_dict.get(
+                        "reasoning",
+                        "Reasoning unavailable"
+                        )}")
+
+        except Exception as e:
+            print(type(e))
+            print(e)
+
+    else:
+        print("Reasoning unavailable. No LLM configuration set")
 
 
 if __name__ == "__main__":
