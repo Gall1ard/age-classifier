@@ -80,6 +80,7 @@ project/
 │   └── system_prompt.txt
 │
 ├── src/
+│   ├── config.py
 │   ├── evaluate.py
 │   ├── fine_tuning.py
 │   ├── main.py
@@ -87,6 +88,7 @@ project/
 │   └── prepare_data.py
 │
 ├── requirements.txt
+├── .gitignore
 └── README.md
 ```
 
