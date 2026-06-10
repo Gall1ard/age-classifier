@@ -95,7 +95,7 @@ project/
 ## Installation
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Gall1ard/age-classifier.git
 cd project
 
 pip install -r requirements.txt
