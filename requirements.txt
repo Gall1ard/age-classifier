@@ -1,3 +1,11 @@
 openai==2.41.0
 httpx==0.28.1
 chutes-e2ee==0.1.0
+kagglehub==1.0.2
+pandas==3.0.3
+numpy==2.4.6
+torch==2.12.0
+matplotlib==3.10.9
+transformers==5.10.2
+scikit-learn==1.9.0
+python-dotenv==1.2.2
